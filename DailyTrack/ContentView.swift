@@ -8,35 +8,90 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var tasks: [Task] = [
-        Task(title: "Estudiar Swift"),
-        Task(title: "Hacer ejercicio"),
-        Task(title: "Leer 20 páginas"),
-        Task (title: "Hacer ejecicio")
-    ]
-    
+    @StateObject private var vm = TaskViewModel() // ViewModel en memoria
+    @State private var newTaskTitle: String = ""  // texto del TextField
+
     var body: some View {
         NavigationView {
-            List {
-                ForEach(tasks) { task in
-                    HStack {
-                        Text(task.title)
-                        Spacer()
-                        if task.isCompleted {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                        } else {
-                            Image(systemName: "circle")
-                                .foregroundColor(.gray)
+            VStack {
+                // --- Entrada para crear tarea ---
+                HStack {
+                    TextField("Nueva tarea...", text: $newTaskTitle)
+                        .textFieldStyle(.roundedBorder)
+                        .autocapitalization(.sentences)
+                        .disableAutocorrection(false)
+
+                    Button(action: addTask) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title2)
+                    }
+                    .disabled(newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Agregar tarea")
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+
+                // --- Lista de tareas ---
+                List {
+                    ForEach(vm.tasks) { task in
+                        TaskRowView(task: task) {
+                            vm.toggleCompleted(task)
                         }
                     }
+                    .onDelete(perform: vm.deleteTask)
                 }
+                .listStyle(.plain)
             }
-            .navigationTitle("DailyTrack ✅")
+            .navigationTitle("DailyTrack")
+            .toolbar {
+                EditButton()
+            }
         }
+    }
+
+    // MARK: - Actions
+    private func addTask() {
+        let title = newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        vm.addTask(title: title)
+        newTaskTitle = ""
     }
 }
 
+// Row reutilizable
+struct TaskRowView: View {
+    let task: Task
+    let toggleAction: () -> Void
+
+    var body: some View {
+        HStack {
+            Button(action: toggleAction) {
+                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundColor(task.isCompleted ? .green : .gray)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(task.isCompleted ? "Desmarcar tarea" : "Marcar tarea como completada")
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(task.title)
+                    .strikethrough(task.isCompleted, color: .gray)
+                    .foregroundColor(task.isCompleted ? .gray : .primary)
+                    .font(.body)
+
+                // Si en el futuro usas dueDate: mostrarlo aquí
+                // if let due = task.dueDate { Text(due, style: .date).font(.caption).foregroundColor(.secondary) }
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+// Preview
 #Preview {
     ContentView()
 }
+

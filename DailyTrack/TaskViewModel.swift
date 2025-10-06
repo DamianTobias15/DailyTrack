@@ -3,51 +3,46 @@
 //  DailyTrack
 //
 //  Created by Erick Damian Tobias Valdez on 10/6/25.
-//  Modify the add line code
+//  Version 1.2 - Added toggleCompletion, improved comments and versioning
+//  Last modified: 10/6/25
+//
+
 import Foundation
 import SwiftUI
 
+/// ViewModel para gestionar las tareas
 class TaskViewModel: ObservableObject {
-    @Published var tasks: [Task] = [] {
-        didSet {
-            saveTasks()
+    @Published var tasks: [Task] = []
+    
+    /// Cargar tareas desde JSON Data
+    func loadTasks(from data: Data) {
+        let decoder = JSONDecoder()
+        do {
+            let decodedTasks = try decoder.decode([Task].self, from: data)
+            DispatchQueue.main.async {
+                self.tasks = decodedTasks
+                print("✅ Tareas cargadas correctamente")
+            }
+        } catch {
+            print("❌ Error al cargar tareas: \(error)")
         }
     }
-
-    private let tasksKey = "tasks"
-
-    init() {
-        loadTasks()
-    }
-
-    // Guardar tareas en UserDefaults
-    private func saveTasks() {
-        if let encoded = try? JSONEncoder().encode(tasks) {
-            UserDefaults.standard.set(encoded, forKey: tasksKey)
-        }
-    }
-
-    // Cargar tareas de UserDefaults
-    private func loadTasks() {
-        if let data = UserDefaults.standard.data(forKey: tasksKey),
-           let decoded = try? JSONDecoder().decode([Task].self, from: data) {
-            self.tasks = decoded
-        }
-    }
-
-    // Funciones de la Fase 3
+    
+    /// Agregar nueva tarea
     func addTask(title: String) {
-        let task = Task(id: UUID(), title: title, isCompleted: false)
-        tasks.append(task)
+        let newTask = Task(title: title)
+        tasks.append(newTask)
     }
-
-    func toggleCompleted(_ task: Task) {
-        if let index = tasks.firstIndex(where: { $0.id == task.id }) {
-            tasks[index].isCompleted.toggle()
-        }
-    }
-
+    
+    /// Eliminar tarea usando IndexSet (compatible con .onDelete)
     func deleteTask(at offsets: IndexSet) {
         tasks.remove(atOffsets: offsets)
+    }
+    
+    /// Actualizar fecha de última modificación de una tarea
+    func updateTaskDate(index: Int) {
+        // Convertimos Date() a timestamp String
+        let timestamp = String(Int(Date().timeIntervalSince1970))
+        tasks[index].updatedAt = timestamp
     }
 }

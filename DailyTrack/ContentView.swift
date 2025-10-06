@@ -2,96 +2,65 @@
 //  ContentView.swift
 //  DailyTrack
 //
-//  Created by Erick Damian Tobias Valdez on 9/26/25.
-//  Add element check
+//  Created by Erick Damian Tobias Valdez on 10/6/25.
+//  Version 1.1 - Refactored for performance and preview stability
+//  Last modified: 10/6/25
+//
+
+import SwiftUI
 
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var vm = TaskViewModel() // ViewModel en memoria
-    @State private var newTaskTitle: String = ""  // texto del TextField
-
+    @StateObject var taskVM = TaskViewModel()
+    @State private var newTaskTitle: String = ""
+    
     var body: some View {
         NavigationView {
             VStack {
-                // --- Entrada para crear tarea ---
                 HStack {
-                    TextField("Nueva tarea...", text: $newTaskTitle)
-                        .textFieldStyle(.roundedBorder)
-                        .autocapitalization(.sentences)
-                        .disableAutocorrection(false)
-
-                    Button(action: addTask) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
+                    TextField("Nueva tarea", text: $newTaskTitle)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .padding(.horizontal)
+                    Button(action: {
+                        guard !newTaskTitle.isEmpty else { return }
+                        taskVM.addTask(title: newTaskTitle)
+                        newTaskTitle = ""
+                    }) {
+                        Image(systemName: "plus")
                     }
-                    .disabled(newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Agregar tarea")
+                    .padding(.trailing)
                 }
-                .padding(.horizontal)
-                .padding(.top, 8)
-
-                // --- Lista de tareas ---
+                
                 List {
-                    ForEach(vm.tasks) { task in
-                        TaskRowView(task: task) {
-                            vm.toggleCompleted(task)
+                    ForEach(taskVM.tasks.indices, id: \.self) { index in
+                        HStack {
+                            Text(taskVM.tasks[index].title)
+                            Spacer()
+                            if taskVM.tasks[index].isCompleted {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                            } else {
+                                Image(systemName: "circle")
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            taskVM.tasks[index].isCompleted.toggle()
+                            taskVM.updateTaskDate(index: index)
                         }
                     }
-                    .onDelete(perform: vm.deleteTask)
+                    .onDelete(perform: taskVM.deleteTask) // ✅ Corregido: recibe IndexSet
                 }
-                .listStyle(.plain)
             }
-            .navigationTitle("DailyTrack")
-            .toolbar {
-                EditButton()
-            }
+            .navigationTitle("Mis Tareas")
         }
     }
+}
 
-    // MARK: - Actions
-    private func addTask() {
-        let title = newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return }
-        vm.addTask(title: title)
-        newTaskTitle = ""
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
     }
 }
-
-// Row reutilizable
-struct TaskRowView: View {
-    let task: Task
-    let toggleAction: () -> Void
-
-    var body: some View {
-        HStack {
-            Button(action: toggleAction) {
-                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundColor(task.isCompleted ? .green : .gray)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(task.isCompleted ? "Desmarcar tarea" : "Marcar tarea como completada")
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(task.title)
-                    .strikethrough(task.isCompleted, color: .gray)
-                    .foregroundColor(task.isCompleted ? .gray : .primary)
-                    .font(.body)
-
-                // Si en el futuro usas dueDate: mostrarlo aquí
-                // if let due = task.dueDate { Text(due, style: .date).font(.caption).foregroundColor(.secondary) }
-            }
-
-            Spacer()
-        }
-        .padding(.vertical, 6)
-    }
-}
-
-// Preview
-#Preview {
-    ContentView()
-}
-

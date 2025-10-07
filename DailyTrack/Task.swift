@@ -3,69 +3,91 @@
 //  DailyTrack
 //
 //  Created by Erick Damian Tobias Valdez on 10/6/25.
-//  Version 1.4 - Safe Codable, full date support, versioning
-//  Last modified: 10/6/25
+//  Version 1.6 - Fase 6: Soporte para categorías, colaboradores y recordatorios
+//  Last modified: 10/7/25
 //
 
 import Foundation
 
-/// Modelo de Tarea
-/// Compatible con Codable, Identifiable y versiones futuras
+/// Modelo principal de Tarea.
+/// Soporta decodificación segura, versionado y compatibilidad futura.
 struct Task: Codable, Identifiable {
     
     // MARK: - Propiedades principales
     let id: UUID
     var title: String
     var isCompleted: Bool
-    var createdAt: Date = Date()       // Fecha de creación
-    var completedAt: Date? = nil       // Fecha de completado (nil si pendiente)
-    var updatedAt: String = String(Int(Date().timeIntervalSince1970)) // Timestamp última modificación
-    var version: Int                    // Versión del modelo
+    var createdAt: Date                     // Fecha de creación
+    var completedAt: Date?                  // Fecha de completado (nil si pendiente)
+    var updatedAt: String                   // Timestamp (string) de última modificación
+    var version: Int                        // Versión del modelo
     
-    // MARK: - Keys para codificación personalizada
+    // MARK: - Fase 6: Categorías, Colaboradores y Recordatorios
+    var categoryId: UUID?                   // ID de la categoría asociada
+    var assignedTo: UUID?                   // ID del colaborador asignado
+    var reminderDate: Date?                 // Fecha y hora de recordatorio opcional
+    
+    // MARK: - Claves de codificación
     enum CodingKeys: String, CodingKey {
         case id, title, isCompleted, createdAt, completedAt, updatedAt, version
+        case categoryId, assignedTo, reminderDate
     }
     
-    // MARK: - Inicializador desde JSON (decodificación segura)
+    // MARK: - Decodificación segura (JSON)
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        
+
         id = try container.decode(UUID.self, forKey: .id)
         title = try container.decode(String.self, forKey: .title)
         isCompleted = try container.decode(Bool.self, forKey: .isCompleted)
-        version = try container.decode(Int.self, forKey: .version)
+        version = (try? container.decode(Int.self, forKey: .version)) ?? 1
+        categoryId = try? container.decode(UUID.self, forKey: .categoryId)
+        assignedTo = try? container.decode(UUID.self, forKey: .assignedTo)
+        reminderDate = try? container.decode(Date.self, forKey: .reminderDate)
         
-        // createdAt: soporta Date o timestamp Double/Int
-        if let createdTimestamp = try? container.decode(Double.self, forKey: .createdAt) {
-            createdAt = Date(timeIntervalSince1970: createdTimestamp)
-        } else if let createdTimestamp = try? container.decode(Int.self, forKey: .createdAt) {
-            createdAt = Date(timeIntervalSince1970: Double(createdTimestamp))
+        // createdAt: soporta Date, Double o Int
+        if let ts = try? container.decode(Double.self, forKey: .createdAt) {
+            createdAt = Date(timeIntervalSince1970: ts)
+        } else if let ts = try? container.decode(Int.self, forKey: .createdAt) {
+            createdAt = Date(timeIntervalSince1970: Double(ts))
         } else {
-            createdAt = try container.decode(Date.self, forKey: .createdAt)
+            createdAt = (try? container.decode(Date.self, forKey: .createdAt)) ?? Date()
         }
         
-        // completedAt: opcional, soporta nil
-        if let completedTimestamp = try? container.decode(Double.self, forKey: .completedAt) {
-            completedAt = Date(timeIntervalSince1970: completedTimestamp)
-        } else if let completedTimestamp = try? container.decode(Int.self, forKey: .completedAt) {
-            completedAt = Date(timeIntervalSince1970: Double(completedTimestamp))
+        // completedAt: soporta nil, Date o timestamp
+        if let ts = try? container.decode(Double.self, forKey: .completedAt) {
+            completedAt = Date(timeIntervalSince1970: ts)
+        } else if let ts = try? container.decode(Int.self, forKey: .completedAt) {
+            completedAt = Date(timeIntervalSince1970: Double(ts))
         } else {
             completedAt = try? container.decode(Date.self, forKey: .completedAt)
         }
         
-        // updatedAt: soporta String o Double
-        if let updatedTimestamp = try? container.decode(Double.self, forKey: .updatedAt) {
-            updatedAt = String(Int(updatedTimestamp))
-        } else if let updatedTimestamp = try? container.decode(Int.self, forKey: .updatedAt) {
-            updatedAt = String(updatedTimestamp)
+        // updatedAt: soporta String, Double o Int
+        if let str = try? container.decode(String.self, forKey: .updatedAt) {
+            updatedAt = str
+        } else if let ts = try? container.decode(Double.self, forKey: .updatedAt) {
+            updatedAt = String(Int(ts))
+        } else if let ts = try? container.decode(Int.self, forKey: .updatedAt) {
+            updatedAt = String(ts)
         } else {
-            updatedAt = try container.decode(String.self, forKey: .updatedAt)
+            updatedAt = "\(Int(Date().timeIntervalSince1970))"
         }
     }
     
-    // MARK: - Inicializador manual desde Swift
-    init(id: UUID = UUID(), title: String, isCompleted: Bool = false, createdAt: Date = Date(), completedAt: Date? = nil, updatedAt: String = "\(Int(Date().timeIntervalSince1970))", version: Int = 1) {
+    // MARK: - Inicializador directo (desde código)
+    init(
+        id: UUID = UUID(),
+        title: String,
+        isCompleted: Bool = false,
+        createdAt: Date = Date(),
+        completedAt: Date? = nil,
+        updatedAt: String = "\(Int(Date().timeIntervalSince1970))",
+        version: Int = 1,
+        categoryId: UUID? = nil,
+        assignedTo: UUID? = nil,
+        reminderDate: Date? = nil
+    ) {
         self.id = id
         self.title = title
         self.isCompleted = isCompleted
@@ -73,14 +95,17 @@ struct Task: Codable, Identifiable {
         self.completedAt = completedAt
         self.updatedAt = updatedAt
         self.version = version
+        self.categoryId = categoryId
+        self.assignedTo = assignedTo
+        self.reminderDate = reminderDate
     }
     
-    // MARK: - Funciones de ayuda
-    /// Retorna true si la tarea fue completada en la semana actual
+    // MARK: - Funciones auxiliares
+    /// Indica si la tarea fue completada dentro de la semana actual.
     func completedThisWeek() -> Bool {
-        guard let completedAt = completedAt else { return false }
+        guard let completedAt else { return false }
         let calendar = Calendar.current
-        let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date()))!
+        guard let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date())) else { return false }
         return completedAt >= startOfWeek
     }
 }

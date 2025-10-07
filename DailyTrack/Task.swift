@@ -108,4 +108,14 @@ struct Task: Codable, Identifiable {
         guard let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date())) else { return false }
         return completedAt >= startOfWeek
     }
+    
+    /// Devuelve true si tiene categoría asignada
+    func hasCategory() -> Bool {
+        return categoryId != nil
+    }
+    
+    /// Devuelve true si tiene colaborador asignado
+    func hasCollaborator() -> Bool {
+        return assignedTo != nil
+    }
 }

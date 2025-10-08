@@ -2,8 +2,8 @@
 //  ContentView.swift
 //  DailyTrack
 //
-//  Version 3.0 - Fase 6: Compatible con TaskViewModel actualizado
-//  Last modified: \(Date())
+//  Version 4.2 - Fase 6: Corrección completa de errores de inicialización
+//  Last modified: 08/10/2025
 //
 
 import SwiftUI
@@ -18,6 +18,8 @@ struct ContentView: View {
     @State private var showingAddTask = false
     @State private var showingCategories = false
     @State private var showingReflections = false
+    @State private var showingCollaborators = false
+    @State private var showingTaskAssignment: Task? = nil
     
     // MARK: - Propiedades calculadas
     /// Calcula el porcentaje de tareas completadas
@@ -40,29 +42,11 @@ struct ContentView: View {
             .navigationTitle("Mis Tareas")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Menu {
-                        Button {
-                            showingCategories = true
-                        } label: {
-                            Label("Categorías", systemImage: "folder")
-                        }
-                        
-                        Button {
-                            showingReflections = true
-                        } label: {
-                            Label("Reflexiones", systemImage: "book")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
+                    mainMenu
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showingAddTask = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
+                    addTaskButton
                 }
             }
             .sheet(isPresented: $showingAddTask) {
@@ -77,11 +61,66 @@ struct ContentView: View {
                 ReflectionsView()
                     .environmentObject(taskVM)
             }
+            .sheet(isPresented: $showingCollaborators) {
+                CollaboratorsManagementView()
+                    .environmentObject(taskVM)
+            }
+            .sheet(item: $showingTaskAssignment) { task in
+                TaskAssignmentView(task: task)
+                    .environmentObject(taskVM)
+            }
         }
     }
 }
 
-// MARK: - Secciones
+// MARK: - Componentes de Toolbar
+private extension ContentView {
+    
+    var mainMenu: some View {
+        Menu {
+            Button {
+                showingCategories = true
+            } label: {
+                Label("Categorías", systemImage: "folder")
+            }
+            
+            Button {
+                showingCollaborators = true
+            } label: {
+                Label("Colaboradores", systemImage: "person.2")
+            }
+            
+            Button {
+                showingReflections = true
+            } label: {
+                Label("Reflexiones", systemImage: "book")
+            }
+            
+            Divider()
+            
+            // Estadísticas rápidas
+            Section("Estadísticas") {
+                Text("\(taskVM.tasks.count) tareas totales")
+                Text("\(taskVM.tasks.filter { $0.isCompleted }.count) completadas")
+                Text("\(taskVM.collaborators.count) colaboradores")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.title3)
+        }
+    }
+    
+    var addTaskButton: some View {
+        Button {
+            showingAddTask = true
+        } label: {
+            Image(systemName: "plus")
+                .font(.title3)
+        }
+    }
+}
+
+// MARK: - Secciones Principales
 private extension ContentView {
     
     /// Sección para agregar una nueva tarea
@@ -154,42 +193,23 @@ private extension ContentView {
                         }
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            withAnimation {
-                                taskVM.deleteTask(task)
-                            }
-                        } label: {
-                            Label("Eliminar", systemImage: "trash")
-                        }
-                        
-                        Button {
-                            taskVM.editTask(task)
-                            showingAddTask = true
-                        } label: {
-                            Label("Editar", systemImage: "pencil")
-                        }
-                        .tint(.blue)
+                        deleteButton(for: task)
+                        editButton(for: task)
+                        assignButton(for: task)
                     }
             }
         }
         .listStyle(.insetGrouped)
         .overlay {
             if taskVM.filteredTasks.isEmpty {
-                VStack(spacing: 20) {
-                    Image(systemName: "checklist")
-                        .font(.system(size: 60))
-                        .foregroundColor(.gray.opacity(0.3))
-                    Text("No hay tareas")
-                        .font(.title2)
-                        .foregroundColor(.gray)
-                    Text("Agrega tu primera tarea usando el botón +")
-                        .font(.body)
-                        .foregroundColor(.gray.opacity(0.7))
-                }
-                .padding()
+                emptyStateView
             }
         }
     }
+}
+
+// MARK: - Componentes de Tareas
+private extension ContentView {
     
     /// Fila individual de tarea
     func taskRow(for task: Task) -> some View {
@@ -208,46 +228,151 @@ private extension ContentView {
                 
                 // Información adicional
                 HStack(spacing: 8) {
-                    if let categoryId = task.categoryId,
-                       let category = taskVM.category(for: categoryId) {
-                        HStack(spacing: 4) {
-                            Image(systemName: category.icon)
-                                .font(.caption2)
-                            Text(category.name)
-                                .font(.caption2)
-                        }
-                        .foregroundColor(category.color)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(category.color.opacity(0.1))
-                        .cornerRadius(4)
-                    }
-                    
-                    if let collaboratorId = task.assignedTo,
-                       let collaborator = taskVM.collaborator(for: collaboratorId) {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(collaborator.avatarColor)
-                                .frame(width: 12, height: 12)
-                            Text(collaborator.initials)
-                                .font(.caption2)
-                        }
-                        .foregroundColor(.secondary)
-                    }
+                    categoryBadge(for: task)
+                    collaboratorBadge(for: task)
                 }
             }
             
             Spacer()
             
-            // Indicador de recordatorio
+            // Indicadores de estado
+            HStack(spacing: 8) {
+                reminderIndicator(for: task)
+                assignmentButton(for: task)
+            }
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+    }
+    
+    func categoryBadge(for task: Task) -> some View {
+        Group {
+            if let categoryId = task.categoryId,
+               let category = taskVM.category(for: categoryId) {
+                HStack(spacing: 4) {
+                    Image(systemName: category.iconName ?? "folder")
+                        .font(.caption2)
+                    Text(category.name)
+                        .font(.caption2)
+                }
+                .foregroundColor(category.color)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(category.color.opacity(0.1))
+                .cornerRadius(4)
+            }
+        }
+    }
+    
+    func collaboratorBadge(for task: Task) -> some View {
+        Group {
+            if let collaboratorId = task.assignedTo,
+               let collaborator = taskVM.collaborator(for: collaboratorId) {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(colorForCollaborator(collaborator))
+                        .frame(width: 12, height: 12)
+                    Text(initialsForCollaborator(collaborator))
+                        .font(.caption2)
+                }
+                .foregroundColor(.secondary)
+            }
+        }
+    }
+    
+    func reminderIndicator(for task: Task) -> some View {
+        Group {
             if task.reminderDate != nil {
                 Image(systemName: "bell.fill")
                     .font(.caption)
                     .foregroundColor(.orange)
             }
         }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
+    }
+    
+    func assignmentButton(for task: Task) -> some View {
+        Button {
+            showingTaskAssignment = task
+        } label: {
+            Image(systemName: "person.circle")
+                .font(.caption)
+                .foregroundColor(task.assignedTo != nil ? .blue : .gray)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - Acciones de Swipe
+private extension ContentView {
+    
+    func deleteButton(for task: Task) -> some View {
+        Button(role: .destructive) {
+            withAnimation {
+                taskVM.deleteTask(task)
+            }
+        } label: {
+            Label("Eliminar", systemImage: "trash")
+        }
+    }
+    
+    func editButton(for task: Task) -> some View {
+        Button {
+            taskVM.editTask(task)
+            showingAddTask = true
+        } label: {
+            Label("Editar", systemImage: "pencil")
+        }
+        .tint(.blue)
+    }
+    
+    func assignButton(for task: Task) -> some View {
+        Button {
+            showingTaskAssignment = task
+        } label: {
+            Label("Asignar", systemImage: "person")
+        }
+        .tint(.green)
+    }
+}
+
+// MARK: - Estados Vacíos
+private extension ContentView {
+    
+    var emptyStateView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "checklist")
+                .font(.system(size: 60))
+                .foregroundColor(.gray.opacity(0.3))
+            Text("No hay tareas")
+                .font(.title2)
+                .foregroundColor(.gray)
+            Text("Agrega tu primera tarea usando el botón +")
+                .font(.body)
+                .foregroundColor(.gray.opacity(0.7))
+        }
+        .padding()
+    }
+}
+
+// MARK: - Utilidades
+private extension ContentView {
+    
+    func colorForCollaborator(_ collaborator: Collaborator) -> Color {
+        let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .red, .indigo]
+        let index = abs(collaborator.id.hashValue) % colors.count
+        return colors[index]
+    }
+    
+    func initialsForCollaborator(_ collaborator: Collaborator) -> String {
+        let components = collaborator.name.components(separatedBy: " ")
+        let initials = components.prefix(2).compactMap { $0.first?.uppercased() }
+        
+        // SOLUCIÓN SIMPLIFICADA - Evita problemas de inicialización
+        var result = ""
+        for initial in initials {
+            result.append(initial)
+        }
+        return result
     }
 }
 
@@ -255,6 +380,5 @@ private extension ContentView {
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
         ContentView()
-            .environmentObject(TaskViewModel.preview)
     }
 }

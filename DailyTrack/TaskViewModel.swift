@@ -601,8 +601,8 @@ extension TaskViewModel {
             Task(title: "Hacer ejercicio", isCompleted: true, categoryId: viewModel.categories[1].id),
             Task(title: "Comprar víveres", categoryId: viewModel.categories[1].id, assignedTo: viewModel.collaborators.first?.id),
             // Fase 8: Hábitos de ejemplo
-            Task(title: "Meditar", isHabit: true, habitFrequency: .daily, habitStreak: 5),
-            Task(title: "Revisar metas semanales", isHabit: true, habitFrequency: .weekly, habitStreak: 2)
+            Task(title: "Meditar", isHabit: true, habitStreak: 5, habitFrequency: .daily),
+            Task(title: "Revisar metas semanales", isHabit: true, habitStreak: 2, habitFrequency: .weekly)
         ]
         
         // Agregar reflexiones de ejemplo

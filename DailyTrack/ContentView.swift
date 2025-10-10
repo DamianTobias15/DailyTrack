@@ -7,7 +7,6 @@
 //
 
 import SwiftUI
-import Charts
 
 struct ContentView: View {
     // MARK: - ViewModels
@@ -36,10 +35,6 @@ struct ContentView: View {
         taskVM.completionRate
     }
     
-    /// Días de la semana para el gráfico
-    private let weekDays = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
-    
-    // MARK: - Cuerpo principal
     var body: some View {
         NavigationView {
             VStack(spacing: 15) {
@@ -54,30 +49,61 @@ struct ContentView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     mainMenu
                 }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    addTaskButton
+                .navigationTitle("DailyTrack")
+                .navigationBarTitleDisplayMode(.large)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            showingAddTask = true
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title2)
+                        }
+                    }
+                    
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button {
+                            showingHabitStats = true
+                        } label: {
+                            Image(systemName: "chart.bar.fill")
+                                .font(.title2)
+                        }
+                    }
+                }
+                .sheet(isPresented: $showingAddTask) {
+                    AddTaskView()
+                        .environmentObject(taskViewModel)
+                }
+                .sheet(isPresented: $showingHabitStats) {
+                    HabitStatsView()
+                        .environmentObject(taskViewModel)
                 }
             }
-            .sheet(isPresented: $showingAddTask) {
-                AddTaskView()
-                    .environmentObject(taskVM)
+            .tabItem {
+                Image(systemName: "checklist")
+                Text("Tareas")
             }
-            .sheet(isPresented: $showingCategories) {
-                CategoryListView()
-                    .environmentObject(taskVM)
+            .tag(0)
+            
+            // Pestaña de hábitos (nueva)
+            NavigationView {
+                HabitStatsView()
+                    .environmentObject(taskViewModel)
             }
-            .sheet(isPresented: $showingReflections) {
+            .tabItem {
+                Image(systemName: "repeat")
+                Text("Hábitos")
+            }
+            .tag(1)
+            
+            // Pestaña de reflexiones (existente)
+            NavigationView {
                 ReflectionsView()
-                    .environmentObject(taskVM)
+                    .environmentObject(taskViewModel)
             }
-            .sheet(isPresented: $showingCollaborators) {
-                CollaboratorsManagementView()
-                    .environmentObject(taskVM)
-            }
-            .sheet(item: $showingTaskAssignment) { task in
-                TaskAssignmentView(task: task)
-                    .environmentObject(taskVM)
+            .tabItem {
+                Image(systemName: "brain.head.profile")
+                Text("Reflexiones")
             }
             .sheet(isPresented: $showingAchievements) {
                 AchievementsView()
@@ -85,30 +111,47 @@ struct ContentView: View {
             }
         }
     }
-}
-
-// MARK: - Componentes de Toolbar
-private extension ContentView {
     
-    var mainMenu: some View {
-        Menu {
-            Button {
-                showingCategories = true
-            } label: {
-                Label("Categorías", systemImage: "folder")
+    // MARK: - Componentes de la Vista Principal
+    
+    private var headerView: some View {
+        VStack(spacing: 8) {
+            HStack {
+                // Estadísticas de hábitos
+                VStack(alignment: .leading) {
+                    Text("Hábitos")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    HStack {
+                        Image(systemName: "flame.fill")
+                            .foregroundColor(.orange)
+                        Text("\(taskViewModel.habits.count) activos")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                    }
+                }
+                
+                Spacer()
+                
+                // Rachas actuales
+                VStack(alignment: .trailing) {
+                    Text("Racha más larga")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    HStack {
+                        Text("\(taskViewModel.generateHabitReport().longestStreak)")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.orange)
+                        Text("días")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                }
             }
-            
-            Button {
-                showingCollaborators = true
-            } label: {
-                Label("Colaboradores", systemImage: "person.2")
-            }
-            
-            Button {
-                showingReflections = true
-            } label: {
-                Label("Reflexiones", systemImage: "book")
-            }
+            .padding(.horizontal)
             
             if !streakVM.achievements.isEmpty {
                 Button {
@@ -127,60 +170,87 @@ private extension ContentView {
                 Text("\(taskVM.collaborators.count) colaboradores")
                 Text("\(streakVM.currentStreak) días de racha")
             }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .font(.title3)
         }
+        .padding(.vertical, 8)
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(.horizontal)
     }
     
-    var addTaskButton: some View {
-        Button {
-            showingAddTask = true
-        } label: {
-            Image(systemName: "plus")
-                .font(.title3)
-        }
-    }
-}
-
-// MARK: - Secciones Principales
-private extension ContentView {
-    
-    /// Sección para agregar una nueva tarea
-    var taskInputSection: some View {
-        HStack {
-            TextField("Nueva tarea rápida", text: $newTaskTitle)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-                .padding(.horizontal)
-            
-            Button {
-                guard !newTaskTitle.isEmpty else { return }
-                withAnimation {
-                    taskVM.addTask(title: newTaskTitle)
-                    newTaskTitle = ""
+    private var filterSection: some View {
+        VStack(spacing: 12) {
+            // Barra de búsqueda
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                
+                TextField("Buscar tareas...", text: $taskViewModel.searchText)
+                    .textFieldStyle(PlainTextFieldStyle())
+                
+                if !taskViewModel.searchText.isEmpty {
+                    Button {
+                        taskViewModel.searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                    }
                 }
-            } label: {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title3)
-                    .foregroundColor(.green)
             }
-            .padding(.trailing)
-            .disabled(newTaskTitle.isEmpty)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .cornerRadius(8)
+            
+            // Filtros horizontales
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(TaskFilter.allCases, id: \.self) { filter in
+                        FilterChip(
+                            title: filter.rawValue,
+                            icon: filter.icon,
+                            isSelected: taskViewModel.selectedFilter == filter,
+                            action: { taskViewModel.selectedFilter = filter }
+                        )
+                    }
+                }
+            }
         }
+        .padding(.horizontal)
     }
     
-    /// Sección de progreso general con animación reactiva
-    var progressSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Progreso: \(Int(completionRate * 100))%")
-                .font(.subheadline)
-                .padding(.leading)
-            
-            ProgressView(value: completionRate)
-                .accentColor(.green)
-                .padding(.horizontal)
-                .animation(.easeInOut(duration: 0.5), value: completionRate)
+    private var taskListView: some View {
+        List {
+            if taskViewModel.filteredTasks.isEmpty {
+                emptyStateView
+            } else {
+                ForEach(taskViewModel.filteredTasks) { task in
+                    TaskRow(
+                        task: task,
+                        onToggle: { taskViewModel.toggleCompletion(task: task) },
+                        onEdit: {
+                            taskViewModel.editTask(task)
+                            showingAddTask = true
+                        }
+                    )
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            taskViewModel.deleteTask(task)
+                        } label: {
+                            Label("Eliminar", systemImage: "trash")
+                        }
+                        
+                        Button {
+                            taskViewModel.editTask(task)
+                            showingAddTask = true
+                        } label: {
+                            Label("Editar", systemImage: "pencil")
+                        }
+                        .tint(.blue)
+                    }
+                }
+            }
         }
+        .listStyle(PlainListStyle())
     }
     
     /// Sección de rachas y logros con animaciones
@@ -269,22 +339,33 @@ private extension ContentView {
         VStack(alignment: .leading) {
             Text("Tareas completadas esta semana")
                 .font(.subheadline)
-                .padding(.leading)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
             
-            Chart {
-                ForEach(0..<7, id: \.self) { i in
-                    BarMark(
-                        x: .value("Día", weekDays[i]),
-                        y: .value("Completadas", taskVM.weeklyStats()[i])
-                    )
-                    .foregroundStyle(.green.gradient)
-                }
+            Button {
+                showingAddTask = true
+            } label: {
+                Text("Agregar \(taskViewModel.selectedFilter == .habits ? "Hábito" : "Tarea")")
+                    .fontWeight(.semibold)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
             }
-            .frame(height: 120)
-            .padding(.horizontal)
-            .animation(.easeInOut(duration: 0.5), value: taskVM.weeklyStats())
         }
+        .frame(maxWidth: .infinity, minHeight: 300)
+        .padding()
     }
+}
+
+// MARK: - Componentes de UI
+
+struct FilterChip: View {
+    let title: String
+    let icon: String
+    let isSelected: Bool
+    let action: () -> Void
     
     /// Lista interactiva de tareas
     var taskListSection: some View {
@@ -310,181 +391,119 @@ private extension ContentView {
             if taskVM.filteredTasks.isEmpty {
                 emptyStateView
             }
-        }
-    }
-}
-
-// MARK: - Componentes de Tareas
-private extension ContentView {
-    
-    /// Fila individual de tarea
-    func taskRow(for task: Task) -> some View {
-        HStack(spacing: 12) {
-            // Indicador de completado
-            Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                .foregroundColor(task.isCompleted ? .green : .gray)
-                .font(.title3)
-                .transition(.scale.combined(with: .opacity))
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(task.title)
-                    .strikethrough(task.isCompleted, color: .green)
-                    .foregroundColor(task.isCompleted ? .gray : .primary)
-                    .font(.body)
-                
-                // Información adicional
-                HStack(spacing: 8) {
-                    categoryBadge(for: task)
-                    collaboratorBadge(for: task)
-                }
-            }
-            
-            Spacer()
-            
-            // Indicadores de estado
-            HStack(spacing: 8) {
-                reminderIndicator(for: task)
-                assignmentButton(for: task)
-            }
-        }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
-    }
-    
-    func categoryBadge(for task: Task) -> some View {
-        Group {
-            if let categoryId = task.categoryId,
-               let category = taskVM.category(for: categoryId) {
-                HStack(spacing: 4) {
-                    Image(systemName: category.iconName ?? "folder")
-                        .font(.caption2)
-                    Text(category.name)
-                        .font(.caption2)
-                }
-                .foregroundColor(category.color)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(category.color.opacity(0.1))
-                .cornerRadius(4)
-            }
-        }
-    }
-    
-    func collaboratorBadge(for task: Task) -> some View {
-        Group {
-            if let collaboratorId = task.assignedTo,
-               let collaborator = taskVM.collaborator(for: collaboratorId) {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(colorForCollaborator(collaborator))
-                        .frame(width: 12, height: 12)
-                    Text(initialsForCollaborator(collaborator))
-                        .font(.caption2)
-                }
-                .foregroundColor(.secondary)
-            }
-        }
-    }
-    
-    func reminderIndicator(for task: Task) -> some View {
-        Group {
-            if task.reminderDate != nil {
-                Image(systemName: "bell.fill")
-                    .font(.caption)
-                    .foregroundColor(.orange)
-            }
-        }
-    }
-    
-    func assignmentButton(for task: Task) -> some View {
-        Button {
-            showingTaskAssignment = task
-        } label: {
-            Image(systemName: "person.circle")
-                .font(.caption)
-                .foregroundColor(task.assignedTo != nil ? .blue : .gray)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(isSelected ? Color.blue : Color(.systemGray6))
+            .foregroundColor(isSelected ? .white : .primary)
+            .cornerRadius(16)
         }
         .buttonStyle(PlainButtonStyle())
     }
 }
 
-// MARK: - Acciones de Swipe
-private extension ContentView {
+struct TaskRow: View {
+    let task: Task
+    let onToggle: () -> Void
+    let onEdit: () -> Void
     
-    func deleteButton(for task: Task) -> some View {
-        Button(role: .destructive) {
-            withAnimation {
-                taskVM.deleteTask(task)
+    var body: some View {
+        HStack(spacing: 12) {
+            // Checkbox de completado
+            Button(action: onToggle) {
+                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.title2)
+                    .foregroundColor(task.isCompleted ? .green : .secondary)
             }
-        } label: {
-            Label("Eliminar", systemImage: "trash")
+            .buttonStyle(PlainButtonStyle())
+            
+            // Información de la tarea
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.title)
+                    .font(.body)
+                    .strikethrough(task.isCompleted, color: .secondary)
+                    .foregroundColor(task.isCompleted ? .secondary : .primary)
+                
+                // Metadata de la tarea
+                HStack(spacing: 8) {
+                    // Indicador de hábito
+                    if task.isHabit {
+                        HStack(spacing: 2) {
+                            Image(systemName: "repeat")
+                                .font(.caption2)
+                            Text(task.habitFrequency.rawValue)
+                                .font(.caption2)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.1))
+                        .foregroundColor(.blue)
+                        .cornerRadius(4)
+                    }
+                    
+                    // Indicador de racha para hábitos
+                    if task.isHabit && task.habitStreak > 0 {
+                        HStack(spacing: 2) {
+                            Image(systemName: "flame.fill")
+                                .font(.caption2)
+                            Text("\(task.habitStreak)")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.orange.opacity(0.1))
+                        .foregroundColor(.orange)
+                        .cornerRadius(4)
+                    }
+                    
+                    // Recordatorio
+                    if task.reminderDate != nil {
+                        Image(systemName: "bell.fill")
+                            .font(.caption2)
+                            .foregroundColor(.red)
+                    }
+                }
+            }
+            
+            Spacer()
+            
+            // Fecha de vencimiento si existe
+            if let dueDate = task.reminderDate {
+                VStack(alignment: .trailing) {
+                    Text(dueDate, style: .time)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text(dueDate, style: .date)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
         }
-    }
-    
-    func editButton(for task: Task) -> some View {
-        Button {
-            taskVM.editTask(task)
-            showingAddTask = true
-        } label: {
-            Label("Editar", systemImage: "pencil")
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onToggle()
         }
-        .tint(.blue)
-    }
-    
-    func assignButton(for task: Task) -> some View {
-        Button {
-            showingTaskAssignment = task
-        } label: {
-            Label("Asignar", systemImage: "person")
+        .contextMenu {
+            Button {
+                onEdit()
+            } label: {
+                Label("Editar", systemImage: "pencil")
+            }
+            
+            Button(role: .destructive) {
+                // La eliminación se maneja desde fuera
+            } label: {
+                Label("Eliminar", systemImage: "trash")
+            }
         }
-        .tint(.green)
     }
 }
 
-// MARK: - Estados Vacíos
-private extension ContentView {
-    
-    var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "checklist")
-                .font(.system(size: 60))
-                .foregroundColor(.gray.opacity(0.3))
-            Text("No hay tareas")
-                .font(.title2)
-                .foregroundColor(.gray)
-            Text("Agrega tu primera tarea usando el botón +")
-                .font(.body)
-                .foregroundColor(.gray.opacity(0.7))
-        }
-        .padding()
-    }
-}
+// MARK: - Preview
 
-// MARK: - Utilidades
-private extension ContentView {
-    
-    func colorForCollaborator(_ collaborator: Collaborator) -> Color {
-        let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .red, .indigo]
-        let index = abs(collaborator.id.hashValue) % colors.count
-        return colors[index]
-    }
-    
-    func initialsForCollaborator(_ collaborator: Collaborator) -> String {
-        let components = collaborator.name.components(separatedBy: " ")
-        let initials = components.prefix(2).compactMap { $0.first?.uppercased() }
-        
-        // SOLUCIÓN SIMPLIFICADA - Evita problemas de inicialización
-        var result = ""
-        for initial in initials {
-            result.append(initial)
-        }
-        return result
-    }
-}
-
-// MARK: - Vista previa
-struct ContentView_Previews: PreviewProvider {
-    static var previews: some View {
-        ContentView()
-    }
+#Preview {
+    ContentView()
+        .environmentObject(TaskViewModel.preview)
 }

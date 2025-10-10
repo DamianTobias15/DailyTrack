@@ -3,15 +3,15 @@
 //  DailyTrack
 //
 //  Created by Erick Damian Tobias Valdez.
-//  Version 3.0 - Fase 6: ViewModel completo con Tasks, Categories, Collaborators y Reflections
-//  Last modified: 07/10/2025
+//  Version 4.0 - Fase 8: ViewModel completo con Sistema de Hábitos
+//  Last modified: 09/10/2025
 //
 
 import Foundation
 import SwiftUI
 
 /// ViewModel principal que gestiona el estado completo de la aplicación
-/// Maneja Tasks, Categories, Collaborators y Reflections con persistencia en UserDefaults
+/// Maneja Tasks, Categories, Collaborators, Reflections y Hábitos con persistencia en UserDefaults
 class TaskViewModel: ObservableObject {
     
     // MARK: - Propiedades Publicadas para UI
@@ -22,6 +22,10 @@ class TaskViewModel: ObservableObject {
     @Published var reminderDate: Date?
     @Published var isEditing: Bool = false
     @Published var editingTask: Task?
+    
+    // MARK: - Fase 8: Propiedades para Hábitos
+    @Published var isHabit: Bool = false
+    @Published var selectedHabitFrequency: HabitFrequency = .daily
     
     // MARK: - Datos Principales
     @Published var tasks: [Task] = []
@@ -34,10 +38,14 @@ class TaskViewModel: ObservableObject {
     @Published var selectedFilter: TaskFilter = .all
     @Published var selectedCategoryFilter: UUID?
     
+    // MARK: - Servicios
+    private let habitService = HabitService()
+    
     // MARK: - Inicialización
     init() {
         loadAllData()
         setupDefaultData()
+        setupHabitSystem() // Fase 8: Inicializar sistema de hábitos
     }
     
     // MARK: - Carga y Configuración Inicial
@@ -63,6 +71,58 @@ class TaskViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Fase 8: Sistema de Hábitos
+    private func setupHabitSystem() {
+        habitService.updateHabits(from: tasks)
+        autoRenewHabits() // Verificar autorrenovación al iniciar
+    }
+    
+    /// Realiza la autorrenovación de hábitos
+    func autoRenewHabits() {
+        habitService.autoRenewHabits(tasks: &tasks)
+        habitService.updateHabits(from: tasks)
+        saveTasks()
+    }
+    
+    /// Completar un hábito con lógica especial de rachas
+    func completeHabit(_ task: Task) {
+        guard var updatedTask = tasks.first(where: { $0.id == task.id }) else { return }
+        
+        if !updatedTask.isCompleted {
+            updatedTask.incrementStreak()
+            tasks = tasks.map { $0.id == task.id ? updatedTask : $0 }
+            habitService.updateHabits(from: tasks)
+            saveTasks()
+            
+            print("✅ Hábito completado: \(task.title) - Nueva racha: \(updatedTask.habitStreak)")
+        }
+    }
+    
+    /// Obtiene todos los hábitos
+    var habits: [Task] {
+        habitService.habits
+    }
+    
+    /// Genera reporte de hábitos
+    func generateHabitReport() -> HabitReport {
+        habitService.generateHabitReport()
+    }
+    
+    /// Hábitos por frecuencia específica
+    func habitsByFrequency(_ frequency: HabitFrequency) -> [Task] {
+        habitService.habitsByFrequency(frequency)
+    }
+    
+    /// Hábitos que necesitan atención
+    func habitsNeedingAttention() -> [Task] {
+        habitService.habitsNeedingAttention()
+    }
+    
+    /// Hábitos con mejor racha
+    func topHabitsByStreak(limit: Int = 5) -> [Task] {
+        habitService.topHabitsByStreak(limit: limit)
+    }
+    
     // MARK: - Persistencia: Tasks
     func loadTasks() {
         if let data = UserDefaults.standard.data(forKey: "tasks") {
@@ -71,6 +131,8 @@ class TaskViewModel: ObservableObject {
                 let decodedTasks = try decoder.decode([Task].self, from: data)
                 DispatchQueue.main.async {
                     self.tasks = decodedTasks
+                    // Fase 8: Actualizar servicio de hábitos
+                    self.habitService.updateHabits(from: self.tasks)
                 }
             } catch {
                 print("❌ Error al cargar tareas: \(error)")
@@ -166,21 +228,25 @@ class TaskViewModel: ObservableObject {
     // MARK: - Operaciones de Tasks
     
     /// Agrega una nueva tarea con parámetros opcionales
-    func addTask(title: String, categoryId: UUID? = nil, assignedTo: UUID? = nil, reminderDate: Date? = nil) {
+    func addTask(title: String, categoryId: UUID? = nil, assignedTo: UUID? = nil, reminderDate: Date? = nil, isHabit: Bool = false, habitFrequency: HabitFrequency = .daily) {
         let newTask = Task(
             title: title,
             categoryId: categoryId,
             assignedTo: assignedTo,
-            reminderDate: reminderDate
+            reminderDate: reminderDate,
+            isHabit: isHabit,
+            habitFrequency: habitFrequency
         )
         tasks.append(newTask)
+        habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
         saveTasks()
-        print("✅ Tarea creada: \(title)")
+        print("✅ Tarea creada: \(title)" + (isHabit ? " (Hábito \(habitFrequency.rawValue))" : ""))
     }
     
     /// Método alternativo para agregar objeto Task completo
     func addTask(_ task: Task) {
         tasks.append(task)
+        habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
         saveTasks()
         print("✅ Tarea creada: \(task.title)")
     }
@@ -190,6 +256,7 @@ class TaskViewModel: ObservableObject {
         if let index = tasks.firstIndex(where: { $0.id == task.id }) {
             tasks[index] = task
             updateTaskDate(index: index)
+            habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
             saveTasks()
             print("✅ Tarea actualizada: \(task.title)")
         }
@@ -216,11 +283,14 @@ class TaskViewModel: ObservableObject {
             title: taskTitle,
             categoryId: selectedCategory?.id,
             assignedTo: selectedCollaborator?.id,
-            reminderDate: reminderDate
+            reminderDate: reminderDate,
+            isHabit: isHabit,
+            habitFrequency: selectedHabitFrequency
         )
         tasks.append(newTask)
+        habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
         saveTasks()
-        print("✅ Tarea creada: \(taskTitle)")
+        print("✅ Tarea creada: \(taskTitle)" + (isHabit ? " (Hábito \(selectedHabitFrequency.rawValue))" : ""))
     }
     
     private func updateExistingTask(_ task: Task) {
@@ -229,7 +299,15 @@ class TaskViewModel: ObservableObject {
             tasks[index].categoryId = selectedCategory?.id
             tasks[index].assignedTo = selectedCollaborator?.id
             tasks[index].reminderDate = reminderDate
+            // Fase 8: Actualizar propiedades de hábito
+            tasks[index].isHabit = isHabit
+            tasks[index].habitFrequency = selectedHabitFrequency
+            if isHabit && tasks[index].habitStartDate == nil {
+                tasks[index].habitStartDate = Date()
+            }
+            
             updateTaskDate(index: index)
+            habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
             saveTasks()
             print("✅ Tarea actualizada: \(taskTitle)")
         }
@@ -241,6 +319,9 @@ class TaskViewModel: ObservableObject {
         selectedCategory = category(for: task.categoryId)
         selectedCollaborator = collaborator(for: task.assignedTo)
         reminderDate = task.reminderDate
+        // Fase 8: Propiedades de hábito
+        isHabit = task.isHabit
+        selectedHabitFrequency = task.habitFrequency
         editingTask = task
         isEditing = true
     }
@@ -248,25 +329,36 @@ class TaskViewModel: ObservableObject {
     /// Elimina tareas por índices
     func deleteTask(at offsets: IndexSet) {
         tasks.remove(atOffsets: offsets)
+        habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
         saveTasks()
     }
     
     /// Elimina una tarea específica
     func deleteTask(_ task: Task) {
         tasks.removeAll { $0.id == task.id }
+        habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
         saveTasks()
     }
     
     /// Alterna el estado de completado de una tarea
     func toggleCompletion(task: Task) {
         if let index = tasks.firstIndex(where: { $0.id == task.id }) {
+            let wasCompleted = tasks[index].isCompleted
             tasks[index].isCompleted.toggle()
+            
             if tasks[index].isCompleted {
                 tasks[index].completedAt = Date()
+                // Fase 8: Si es hábito, manejar racha
+                if tasks[index].isHabit && !wasCompleted {
+                    tasks[index].incrementStreak()
+                    print("🔥 Hábito '\(task.title)' - Nueva racha: \(tasks[index].habitStreak)")
+                }
             } else {
                 tasks[index].completedAt = nil
             }
+            
             updateTaskDate(index: index)
+            habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
             saveTasks()
         }
     }
@@ -361,6 +453,9 @@ class TaskViewModel: ObservableObject {
         reminderDate = nil
         isEditing = false
         editingTask = nil
+        // Fase 8: Limpiar propiedades de hábito
+        isHabit = false
+        selectedHabitFrequency = .daily
     }
     
     func cancelEditing() {
@@ -382,6 +477,8 @@ class TaskViewModel: ObservableObject {
             filtered = filtered.filter { !$0.isCompleted }
         case .withReminders:
             filtered = filtered.filter { $0.reminderDate != nil }
+        case .habits: // Fase 8: Nuevo filtro para hábitos
+            filtered = filtered.filter { $0.isHabit }
         }
         
         // Filtro por categoría
@@ -415,6 +512,19 @@ class TaskViewModel: ObservableObject {
         guard !tasks.isEmpty else { return 0 }
         let completed = tasks.filter(\.isCompleted).count
         return Double(completed) / Double(tasks.count)
+    }
+    
+    // Fase 8: Métricas específicas de hábitos
+    var habitCompletionRate: Double {
+        guard !habits.isEmpty else { return 0 }
+        let completedHabits = habits.filter(\.isCompleted).count
+        return Double(completedHabits) / Double(habits.count)
+    }
+    
+    var averageHabitStreak: Double {
+        guard !habits.isEmpty else { return 0 }
+        let totalStreak = habits.reduce(0) { $0 + $1.habitStreak }
+        return Double(totalStreak) / Double(habits.count)
     }
     
     func weeklyStats() -> [Int] {
@@ -465,6 +575,7 @@ enum TaskFilter: String, CaseIterable {
     case completed = "Completadas"
     case pending = "Pendientes"
     case withReminders = "Con Recordatorios"
+    case habits = "Hábitos" // Fase 8: Nuevo filtro
     
     var icon: String {
         switch self {
@@ -472,6 +583,7 @@ enum TaskFilter: String, CaseIterable {
         case .completed: return "checkmark.circle"
         case .pending: return "circle"
         case .withReminders: return "bell"
+        case .habits: return "repeat" // Fase 8
         }
     }
 }
@@ -487,7 +599,10 @@ extension TaskViewModel {
         viewModel.tasks = [
             Task(title: "Reunión de equipo", categoryId: viewModel.categories.first?.id),
             Task(title: "Hacer ejercicio", isCompleted: true, categoryId: viewModel.categories[1].id),
-            Task(title: "Comprar víveres", categoryId: viewModel.categories[1].id, assignedTo: viewModel.collaborators.first?.id)
+            Task(title: "Comprar víveres", categoryId: viewModel.categories[1].id, assignedTo: viewModel.collaborators.first?.id),
+            // Fase 8: Hábitos de ejemplo
+            Task(title: "Meditar", isHabit: true, habitStreak: 5, habitFrequency: .daily),
+            Task(title: "Revisar metas semanales", isHabit: true, habitStreak: 2, habitFrequency: .weekly)
         ]
         
         // Agregar reflexiones de ejemplo

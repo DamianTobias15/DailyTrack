@@ -2,30 +2,52 @@
 //  ContentView.swift
 //  DailyTrack
 //
-//  Versión 5.0 - Fase 8: Integración completa de hábitos
+//  Version 5.0 - Fase 7: Integración completa de sistema de rachas
+//  Last modified: 08/10/2025
 //
 
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var taskViewModel = TaskViewModel()
-    @State private var selectedTab = 0
+    // MARK: - ViewModels
+    @StateObject private var taskVM = TaskViewModel()
+    @StateObject private var streakVM: StreakViewModel
+    
+    // MARK: - Estados
+    @State private var newTaskTitle: String = ""
     @State private var showingAddTask = false
-    @State private var showingHabitStats = false
+    @State private var showingCategories = false
+    @State private var showingReflections = false
+    @State private var showingCollaborators = false
+    @State private var showingTaskAssignment: Task? = nil
+    @State private var showingAchievements = false
+    
+    // MARK: - Inicializador
+    init() {
+        let taskViewModel = TaskViewModel()
+        _taskVM = StateObject(wrappedValue: taskViewModel)
+        _streakVM = StateObject(wrappedValue: StreakViewModel(taskVM: taskViewModel))
+    }
+    
+    // MARK: - Propiedades calculadas
+    /// Calcula el porcentaje de tareas completadas
+    private var completionRate: Double {
+        taskVM.completionRate
+    }
     
     var body: some View {
-        TabView(selection: $selectedTab) {
-            // Pestaña principal de tareas
-            NavigationView {
-                VStack {
-                    // Header con estadísticas rápidas
-                    headerView
-                    
-                    // Filtros y búsqueda
-                    filterSection
-                    
-                    // Lista de tareas
-                    taskListView
+        NavigationView {
+            VStack(spacing: 15) {
+                taskInputSection
+                progressSection
+                streaksSection
+                weeklyChartSection
+                taskListSection
+            }
+            .navigationTitle("Mis Tareas")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    mainMenu
                 }
                 .navigationTitle("DailyTrack")
                 .navigationBarTitleDisplayMode(.large)
@@ -83,7 +105,10 @@ struct ContentView: View {
                 Image(systemName: "brain.head.profile")
                 Text("Reflexiones")
             }
-            .tag(2)
+            .sheet(isPresented: $showingAchievements) {
+                AchievementsView()
+                    .environmentObject(streakVM)
+            }
         }
     }
     
@@ -128,25 +153,22 @@ struct ContentView: View {
             }
             .padding(.horizontal)
             
-            // Barra de progreso de hábitos
-            if !taskViewModel.habits.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("Completados hoy:")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
-                        
-                        Text("\(taskViewModel.generateHabitReport().completedToday)/\(taskViewModel.habits.count)")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                    }
-                    
-                    ProgressView(value: Double(taskViewModel.generateHabitReport().completedToday), total: Double(taskViewModel.habits.count))
-                        .progressViewStyle(LinearProgressViewStyle(tint: .green))
+            if !streakVM.achievements.isEmpty {
+                Button {
+                    showingAchievements = true
+                } label: {
+                    Label("Logros (\(streakVM.achievements.count))", systemImage: "trophy")
                 }
-                .padding(.horizontal)
+            }
+            
+            Divider()
+            
+            // Estadísticas rápidas
+            Section("Estadísticas") {
+                Text("\(taskVM.tasks.count) tareas totales")
+                Text("\(taskVM.tasks.filter { $0.isCompleted }.count) completadas")
+                Text("\(taskVM.collaborators.count) colaboradores")
+                Text("\(streakVM.currentStreak) días de racha")
             }
         }
         .padding(.vertical, 8)
@@ -231,19 +253,91 @@ struct ContentView: View {
         .listStyle(PlainListStyle())
     }
     
-    private var emptyStateView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "checkmark.circle")
-                .font(.system(size: 50))
-                .foregroundColor(.secondary)
-            
-            Text("No hay tareas")
+    /// Sección de rachas y logros con animaciones
+    var streaksSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Rachas y Progreso")
                 .font(.headline)
-                .foregroundColor(.primary)
+                .padding(.horizontal)
             
-            Text(taskViewModel.selectedFilter == .habits ?
-                 "Agrega tu primer hábito para comenzar a seguir tu progreso" :
-                 "Agrega tu primera tarea para comenzar")
+            HStack(spacing: 15) {
+                // Racha Actual
+                VStack {
+                    Text("\(streakVM.currentStreak)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(streakVM.currentStreak > 0 ? .orange : .gray)
+                        .transition(.scale.combined(with: .opacity))
+                    
+                    Text("Días")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(10)
+                
+                // Racha Más Larga
+                VStack {
+                    Text("\(streakVM.longestStreak)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.blue)
+                    
+                    Text("Récord")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(10)
+            }
+            .padding(.horizontal)
+            
+            // Progreso Semanal
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Progreso Semanal")
+                        .font(.subheadline)
+                    Spacer()
+                    Text("\(Int(streakVM.weeklyCompletion * 100))%")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                
+                ProgressView(value: streakVM.weeklyCompletion)
+                    .accentColor(.green)
+                    .animation(.easeInOut(duration: 0.5), value: streakVM.weeklyCompletion)
+            }
+            .padding(.horizontal)
+            
+            // Botón para ver logros
+            if !streakVM.achievements.isEmpty {
+                Button {
+                    showingAchievements = true
+                } label: {
+                    HStack {
+                        Image(systemName: "trophy.fill")
+                            .foregroundColor(.yellow)
+                        Text("Ver Logros (\(streakVM.achievements.count))")
+                            .font(.subheadline)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+    
+    /// Gráfico semanal de tareas completadas con animación reactiva
+    var weeklyChartSection: some View {
+        VStack(alignment: .leading) {
+            Text("Tareas completadas esta semana")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -273,14 +367,29 @@ struct FilterChip: View {
     let isSelected: Bool
     let action: () -> Void
     
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.caption)
-                Text(title)
-                    .font(.caption)
-                    .fontWeight(.medium)
+    /// Lista interactiva de tareas
+    var taskListSection: some View {
+        List {
+            ForEach(taskVM.filteredTasks) { task in
+                taskRow(for: task)
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                            taskVM.toggleCompletion(task: task)
+                            // Actualizar rachas cuando se completa una tarea
+                            streakVM.refreshAllCalculations()
+                        }
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        deleteButton(for: task)
+                        editButton(for: task)
+                        assignButton(for: task)
+                    }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .overlay {
+            if taskVM.filteredTasks.isEmpty {
+                emptyStateView
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)

@@ -3,8 +3,8 @@
 //  DailyTrack
 //
 //  Created by Erick Damian Tobias Valdez.
-//  Versión: 1.0 - Gestión completa de colaboradores
-//  Last modified: 07/10/2025
+//  Versión: 1.1 - Migrado a EnvironmentObject
+//  Last modified: 10/10/2025
 //
 
 import SwiftUI
@@ -53,6 +53,7 @@ struct CollaboratorsManagementView: View {
         }
     }
     
+    // MARK: - Empty State View
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             Image(systemName: "person.2.slash")
@@ -81,6 +82,7 @@ struct CollaboratorsManagementView: View {
         .padding()
     }
     
+    // MARK: - Collaborators List
     private var collaboratorsListView: some View {
         List {
             Section(header: Text("Colaboradores (\(taskVM.collaborators.count))")) {
@@ -145,6 +147,7 @@ struct CollaboratorsManagementView: View {
         .listStyle(.insetGrouped)
     }
     
+    // MARK: - Form Views
     private var collaboratorFormView: some View {
         collaboratorFormView(editing: nil)
     }
@@ -197,6 +200,7 @@ struct CollaboratorsManagementView: View {
         }
     }
     
+    // MARK: - Data Management Methods
     private func saveCollaborator(editing collaborator: Collaborator?) {
         let name = newCollaboratorName.trimmingCharacters(in: .whitespacesAndNewlines)
         let role = newCollaboratorRole.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -243,6 +247,7 @@ struct CollaboratorsManagementView: View {
         newCollaboratorContact = ""
     }
     
+    // MARK: - UI Helper Methods
     private func colorForCollaborator(_ collaborator: Collaborator) -> Color {
         let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .red, .indigo]
         let index = abs(collaborator.id.hashValue) % colors.count
@@ -256,6 +261,7 @@ struct CollaboratorsManagementView: View {
     }
 }
 
+// MARK: - Preview
 struct CollaboratorsManagementView_Previews: PreviewProvider {
     static var previews: some View {
         CollaboratorsManagementView()

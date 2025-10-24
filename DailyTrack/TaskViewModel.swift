@@ -3,8 +3,8 @@
 //  DailyTrack
 //
 //  Created by Erick Damian Tobias Valdez.
-//  Version 4.0 - Fase 8: ViewModel completo con Sistema de Hábitos
-//  Last modified: 09/10/2025
+//  Version 4.2 - Fase 8: ViewModel completo con Sistema de Hábitos + CORRECIONES ESTABLES
+//  Last modified: 10/10/2025 - VERSIÓN ESTABLE Y FUNCIONAL
 //
 
 import Foundation
@@ -12,6 +12,7 @@ import SwiftUI
 
 /// ViewModel principal que gestiona el estado completo de la aplicación
 /// Maneja Tasks, Categories, Collaborators, Reflections y Hábitos con persistencia en UserDefaults
+/// ✅ VERSIÓN ESTABLE: Sin dependencias circulares, métodos de colaboradores reparados
 class TaskViewModel: ObservableObject {
     
     // MARK: - Propiedades Publicadas para UI
@@ -41,11 +42,14 @@ class TaskViewModel: ObservableObject {
     // MARK: - Servicios
     private let habitService = HabitService()
     
+    // ✅ CORRECIÓN: Eliminada la dependencia circular con StreakViewModel
+    // La integración se manejará a través de notificaciones o en el nivel de ContentView
+    
     // MARK: - Inicialización
     init() {
         loadAllData()
         setupDefaultData()
-        setupHabitSystem() // Fase 8: Inicializar sistema de hábitos
+        setupHabitSystem()
     }
     
     // MARK: - Carga y Configuración Inicial
@@ -65,16 +69,15 @@ class TaskViewModel: ObservableObject {
         }
         
         if collaborators.isEmpty {
-            collaborators = Collaborator.sampleCollaborators
+            setupDefaultCollaborators()
             selectedCollaborator = collaborators.first
-            saveCollaborators()
         }
     }
     
     // MARK: - Fase 8: Sistema de Hábitos
     private func setupHabitSystem() {
         habitService.updateHabits(from: tasks)
-        autoRenewHabits() // Verificar autorrenovación al iniciar
+        autoRenewHabits()
     }
     
     /// Realiza la autorrenovación de hábitos
@@ -131,7 +134,6 @@ class TaskViewModel: ObservableObject {
                 let decodedTasks = try decoder.decode([Task].self, from: data)
                 DispatchQueue.main.async {
                     self.tasks = decodedTasks
-                    // Fase 8: Actualizar servicio de hábitos
                     self.habitService.updateHabits(from: self.tasks)
                 }
             } catch {
@@ -175,7 +177,7 @@ class TaskViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Persistencia: Collaborators
+    // MARK: - Persistencia: Collaborators - VERSIÓN ESTABLE
     func loadCollaborators() {
         if let data = UserDefaults.standard.data(forKey: "collaborators") {
             let decoder = JSONDecoder()
@@ -183,11 +185,25 @@ class TaskViewModel: ObservableObject {
                 let decodedCollaborators = try decoder.decode([Collaborator].self, from: data)
                 DispatchQueue.main.async {
                     self.collaborators = decodedCollaborators
+                    print("✅ \(self.collaborators.count) colaboradores cargados")
                 }
             } catch {
                 print("❌ Error al cargar colaboradores: \(error)")
+                setupDefaultCollaborators()
             }
+        } else {
+            setupDefaultCollaborators()
         }
+    }
+    
+    private func setupDefaultCollaborators() {
+        collaborators = [
+            Collaborator(name: "María García", contactInfo: "maria@equipo.com", role: "Desarrollador"),
+            Collaborator(name: "Carlos López", contactInfo: "carlos@equipo.com", role: "Diseñador"),
+            Collaborator(name: "Ana Martínez", contactInfo: "ana@equipo.com", role: "Project Manager")
+        ]
+        saveCollaborators()
+        print("🔧 Colaboradores por defecto inicializados")
     }
     
     func saveCollaborators() {
@@ -195,6 +211,7 @@ class TaskViewModel: ObservableObject {
         do {
             let data = try encoder.encode(collaborators)
             UserDefaults.standard.set(data, forKey: "collaborators")
+            print("💾 Colaboradores guardados: \(collaborators.count)")
         } catch {
             print("❌ Error al guardar colaboradores: \(error)")
         }
@@ -238,7 +255,7 @@ class TaskViewModel: ObservableObject {
             habitFrequency: habitFrequency
         )
         tasks.append(newTask)
-        habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
+        habitService.updateHabits(from: tasks)
         saveTasks()
         print("✅ Tarea creada: \(title)" + (isHabit ? " (Hábito \(habitFrequency.rawValue))" : ""))
     }
@@ -246,7 +263,7 @@ class TaskViewModel: ObservableObject {
     /// Método alternativo para agregar objeto Task completo
     func addTask(_ task: Task) {
         tasks.append(task)
-        habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
+        habitService.updateHabits(from: tasks)
         saveTasks()
         print("✅ Tarea creada: \(task.title)")
     }
@@ -256,7 +273,7 @@ class TaskViewModel: ObservableObject {
         if let index = tasks.firstIndex(where: { $0.id == task.id }) {
             tasks[index] = task
             updateTaskDate(index: index)
-            habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
+            habitService.updateHabits(from: tasks)
             saveTasks()
             print("✅ Tarea actualizada: \(task.title)")
         }
@@ -288,7 +305,7 @@ class TaskViewModel: ObservableObject {
             habitFrequency: selectedHabitFrequency
         )
         tasks.append(newTask)
-        habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
+        habitService.updateHabits(from: tasks)
         saveTasks()
         print("✅ Tarea creada: \(taskTitle)" + (isHabit ? " (Hábito \(selectedHabitFrequency.rawValue))" : ""))
     }
@@ -299,7 +316,6 @@ class TaskViewModel: ObservableObject {
             tasks[index].categoryId = selectedCategory?.id
             tasks[index].assignedTo = selectedCollaborator?.id
             tasks[index].reminderDate = reminderDate
-            // Fase 8: Actualizar propiedades de hábito
             tasks[index].isHabit = isHabit
             tasks[index].habitFrequency = selectedHabitFrequency
             if isHabit && tasks[index].habitStartDate == nil {
@@ -307,7 +323,7 @@ class TaskViewModel: ObservableObject {
             }
             
             updateTaskDate(index: index)
-            habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
+            habitService.updateHabits(from: tasks)
             saveTasks()
             print("✅ Tarea actualizada: \(taskTitle)")
         }
@@ -319,7 +335,6 @@ class TaskViewModel: ObservableObject {
         selectedCategory = category(for: task.categoryId)
         selectedCollaborator = collaborator(for: task.assignedTo)
         reminderDate = task.reminderDate
-        // Fase 8: Propiedades de hábito
         isHabit = task.isHabit
         selectedHabitFrequency = task.habitFrequency
         editingTask = task
@@ -329,18 +344,46 @@ class TaskViewModel: ObservableObject {
     /// Elimina tareas por índices
     func deleteTask(at offsets: IndexSet) {
         tasks.remove(atOffsets: offsets)
-        habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
+        habitService.updateHabits(from: tasks)
         saveTasks()
     }
     
     /// Elimina una tarea específica
     func deleteTask(_ task: Task) {
         tasks.removeAll { $0.id == task.id }
-        habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
+        habitService.updateHabits(from: tasks)
         saveTasks()
     }
     
-    /// Alterna el estado de completado de una tarea
+    // MARK: - ✅ CORRECIONES: Métodos de Completado Estables
+    
+    /// Completar una tarea específica - VERSIÓN ESTABLE
+    func completeTask(_ task: Task) {
+        if let index = tasks.firstIndex(where: { $0.id == task.id }) {
+            let wasCompleted = tasks[index].isCompleted
+            
+            if !wasCompleted {
+                tasks[index].isCompleted = true
+                tasks[index].completedAt = Date()
+                
+                updateTaskDate(index: index)
+                
+                // ✅ CORRECIÓN: Notificación segura sin dependencia circular
+                NotificationCenter.default.post(name: .taskCompleted, object: Date())
+                
+                if tasks[index].isHabit {
+                    tasks[index].incrementStreak()
+                    print("🔥 Hábito completado: \(task.title) - Nueva racha: \(tasks[index].habitStreak)")
+                }
+                
+                habitService.updateHabits(from: tasks)
+                saveTasks()
+                print("✅ Tarea completada: \(task.title)")
+            }
+        }
+    }
+    
+    /// Alterna el estado de completado de una tarea - VERSIÓN ESTABLE
     func toggleCompletion(task: Task) {
         if let index = tasks.firstIndex(where: { $0.id == task.id }) {
             let wasCompleted = tasks[index].isCompleted
@@ -348,7 +391,10 @@ class TaskViewModel: ObservableObject {
             
             if tasks[index].isCompleted {
                 tasks[index].completedAt = Date()
-                // Fase 8: Si es hábito, manejar racha
+                
+                // ✅ CORRECIÓN: Notificación segura sin dependencia circular
+                NotificationCenter.default.post(name: .taskCompleted, object: Date())
+                
                 if tasks[index].isHabit && !wasCompleted {
                     tasks[index].incrementStreak()
                     print("🔥 Hábito '\(task.title)' - Nueva racha: \(tasks[index].habitStreak)")
@@ -358,15 +404,14 @@ class TaskViewModel: ObservableObject {
             }
             
             updateTaskDate(index: index)
-            habitService.updateHabits(from: tasks) // Fase 8: Actualizar hábitos
+            habitService.updateHabits(from: tasks)
             saveTasks()
         }
     }
     
     /// Actualiza la fecha de modificación de una tarea
     private func updateTaskDate(index: Int) {
-        let timestamp = String(Int(Date().timeIntervalSince1970))
-        tasks[index].updatedAt = timestamp
+        tasks[index].updatedAt = String(Int(Date().timeIntervalSince1970))
     }
     
     // MARK: - Operaciones de Categories
@@ -383,7 +428,6 @@ class TaskViewModel: ObservableObject {
     
     func deleteCategory(_ category: Category) {
         categories.removeAll { $0.id == category.id }
-        // Remover referencia de categoría en tareas
         for index in tasks.indices where tasks[index].categoryId == category.id {
             tasks[index].categoryId = nil
         }
@@ -391,31 +435,81 @@ class TaskViewModel: ObservableObject {
         saveTasks()
     }
     
-    // MARK: - Operaciones de Collaborators
+    // MARK: - ✅ CORRECIONES: Operaciones de Collaborators Completas y Estables
     
     func collaborator(for id: UUID?) -> Collaborator? {
         collaborators.first { $0.id == id }
     }
     
+    /// Agregar colaborador por nombre
     func addCollaborator(name: String, contactInfo: String? = nil, role: String? = nil) {
         let newCollaborator = Collaborator(name: name, contactInfo: contactInfo, role: role)
         collaborators.append(newCollaborator)
         saveCollaborators()
+        print("✅ Colaborador agregado: \(name)")
     }
     
+    /// Agregar colaborador por objeto
+    func addCollaborator(_ collaborator: Collaborator) {
+        collaborators.append(collaborator)
+        saveCollaborators()
+        print("✅ Colaborador agregado: \(collaborator.name)")
+    }
+    
+    /// Eliminar colaborador por índice
+    func removeCollaborator(at index: Int) {
+        guard index >= 0 && index < collaborators.count else {
+            print("❌ Índice de colaborador inválido: \(index)")
+            return
+        }
+        
+        let collaborator = collaborators[index]
+        collaborators.remove(at: index)
+        
+        for i in tasks.indices where tasks[i].assignedTo == collaborator.id {
+            tasks[i].assignedTo = nil
+        }
+        
+        saveCollaborators()
+        saveTasks()
+        print("🗑️ Colaborador eliminado: \(collaborator.name)")
+    }
+    
+    /// Eliminar colaborador por objeto
     func deleteCollaborator(_ collaborator: Collaborator) {
         collaborators.removeAll { $0.id == collaborator.id }
-        // Remover referencia de colaborador en tareas
         for index in tasks.indices where tasks[index].assignedTo == collaborator.id {
             tasks[index].assignedTo = nil
         }
         saveCollaborators()
         saveTasks()
+        print("🗑️ Colaborador eliminado: \(collaborator.name)")
+    }
+    
+    /// Reasignar tarea a colaborador
+    func reassignTask(_ taskId: UUID, to collaboratorId: UUID?) {
+        if let index = tasks.firstIndex(where: { $0.id == taskId }) {
+            tasks[index].assignedTo = collaboratorId
+            updateTaskDate(index: index)
+            saveTasks()
+            
+            let collaboratorName = collaboratorId != nil ?
+                collaborator(for: collaboratorId)?.name ?? "Desconocido" : "Sin asignar"
+            
+            print("🔄 Tarea reasignada a: \(collaboratorName)")
+        }
+    }
+    
+    /// Obtener nombre de colaborador de forma segura
+    func collaboratorName(for id: UUID?) -> String {
+        guard let id = id, let collaborator = collaborator(for: id) else {
+            return "Sin asignar"
+        }
+        return collaborator.name
     }
     
     // MARK: - Operaciones de Reflections
     
-    /// Agrega una nueva reflexión
     func addReflection(text: String, mood: Int = 3, tags: [String] = []) {
         let newReflection = Reflection(text: text, mood: mood, tags: tags)
         reflections.append(newReflection)
@@ -423,7 +517,6 @@ class TaskViewModel: ObservableObject {
         print("✅ Reflexión guardada")
     }
     
-    /// Actualiza una reflexión existente
     func updateReflection(_ reflection: Reflection) {
         if let index = reflections.firstIndex(where: { $0.id == reflection.id }) {
             reflections[index] = reflection
@@ -431,13 +524,11 @@ class TaskViewModel: ObservableObject {
         }
     }
     
-    /// Elimina una reflexión
     func deleteReflection(_ reflection: Reflection) {
         reflections.removeAll { $0.id == reflection.id }
         saveReflections()
     }
     
-    /// Obtiene reflexiones para una fecha específica
     func reflectionsForDate(_ date: Date) -> [Reflection] {
         let calendar = Calendar.current
         return reflections.filter { calendar.isDate($0.date, inSameDayAs: date) }
@@ -453,7 +544,6 @@ class TaskViewModel: ObservableObject {
         reminderDate = nil
         isEditing = false
         editingTask = nil
-        // Fase 8: Limpiar propiedades de hábito
         isHabit = false
         selectedHabitFrequency = .daily
     }
@@ -467,7 +557,6 @@ class TaskViewModel: ObservableObject {
     var filteredTasks: [Task] {
         var filtered = tasks
         
-        // Filtro por estado
         switch selectedFilter {
         case .all:
             break
@@ -477,16 +566,14 @@ class TaskViewModel: ObservableObject {
             filtered = filtered.filter { !$0.isCompleted }
         case .withReminders:
             filtered = filtered.filter { $0.reminderDate != nil }
-        case .habits: // Fase 8: Nuevo filtro para hábitos
+        case .habits:
             filtered = filtered.filter { $0.isHabit }
         }
         
-        // Filtro por categoría
         if let categoryId = selectedCategoryFilter {
             filtered = filtered.filter { $0.categoryId == categoryId }
         }
         
-        // Búsqueda por texto
         if !searchText.isEmpty {
             filtered = filtered.filter { task in
                 task.title.localizedCaseInsensitiveContains(searchText) ||
@@ -506,6 +593,31 @@ class TaskViewModel: ObservableObject {
         tasks.filter { $0.assignedTo == collaboratorId }
     }
     
+    // MARK: - ✅ NUEVO: Métodos de Utilidad y Debugging
+    
+    /// Imprimir estado actual para debugging
+    func printCurrentState() {
+        print("\n=== ESTADO ACTUAL TASKVIEWMODEL ===")
+        print("📋 Tareas: \(tasks.count)")
+        print("👥 Colaboradores: \(collaborators.count)")
+        print("📊 Hábitos: \(habits.count)")
+        print("✅ Tareas completadas: \(tasks.filter { $0.isCompleted }.count)")
+        
+        for collaborator in collaborators {
+            let tasksCount = tasksForCollaborator(collaborator.id).count
+            print("   👤 \(collaborator.name): \(tasksCount) tareas")
+        }
+        print("================================\n")
+    }
+    
+    /// Obtener estadísticas de colaborador
+    func collaboratorStats(_ collaboratorId: UUID) -> (total: Int, completed: Int) {
+        let collaboratorTasks = tasksForCollaborator(collaboratorId)
+        let total = collaboratorTasks.count
+        let completed = collaboratorTasks.filter { $0.isCompleted }.count
+        return (total, completed)
+    }
+    
     // MARK: - Estadísticas y Métricas
     
     var completionRate: Double {
@@ -514,7 +626,6 @@ class TaskViewModel: ObservableObject {
         return Double(completed) / Double(tasks.count)
     }
     
-    // Fase 8: Métricas específicas de hábitos
     var habitCompletionRate: Double {
         guard !habits.isEmpty else { return 0 }
         let completedHabits = habits.filter(\.isCompleted).count
@@ -575,7 +686,7 @@ enum TaskFilter: String, CaseIterable {
     case completed = "Completadas"
     case pending = "Pendientes"
     case withReminders = "Con Recordatorios"
-    case habits = "Hábitos" // Fase 8: Nuevo filtro
+    case habits = "Hábitos"
     
     var icon: String {
         switch self {
@@ -583,9 +694,15 @@ enum TaskFilter: String, CaseIterable {
         case .completed: return "checkmark.circle"
         case .pending: return "circle"
         case .withReminders: return "bell"
-        case .habits: return "repeat" // Fase 8
+        case .habits: return "repeat"
         }
     }
+}
+
+// MARK: - Notificaciones para Integración con StreakViewModel
+
+extension Notification.Name {
+    static let taskCompleted = Notification.Name("taskCompleted")
 }
 
 // MARK: - Preview Provider para Desarrollo
@@ -595,17 +712,14 @@ extension TaskViewModel {
     static var preview: TaskViewModel {
         let viewModel = TaskViewModel()
         
-        // Agregar datos de ejemplo para previews
         viewModel.tasks = [
             Task(title: "Reunión de equipo", categoryId: viewModel.categories.first?.id),
             Task(title: "Hacer ejercicio", isCompleted: true, categoryId: viewModel.categories[1].id),
             Task(title: "Comprar víveres", categoryId: viewModel.categories[1].id, assignedTo: viewModel.collaborators.first?.id),
-            // Fase 8: Hábitos de ejemplo
             Task(title: "Meditar", isHabit: true, habitStreak: 5, habitFrequency: .daily),
             Task(title: "Revisar metas semanales", isHabit: true, habitStreak: 2, habitFrequency: .weekly)
         ]
         
-        // Agregar reflexiones de ejemplo
         viewModel.reflections = [
             Reflection(text: "Hoy fue un día muy productivo", mood: 4, tags: ["productivo", "éxito"]),
             Reflection(text: "Me siento motivado para la semana", mood: 5, tags: ["motivación"])

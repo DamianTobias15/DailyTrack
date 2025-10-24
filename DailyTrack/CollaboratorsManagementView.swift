@@ -2,9 +2,8 @@
 //  CollaboratorsManagementView.swift
 //  DailyTrack
 //
-//  Created by Erick Damian Tobias Valdez.
-//  Versión: 1.1 - Migrado a EnvironmentObject
-//  Last modified: 10/10/2025
+//  CORREGIDO: Eliminado NavigationView duplicado
+//  Versión: 1.2 - Bug de headers duplicados resuelto
 //
 
 import SwiftUI
@@ -19,37 +18,36 @@ struct CollaboratorsManagementView: View {
     @State private var editingCollaborator: Collaborator?
     
     var body: some View {
-        NavigationView {
-            VStack {
-                if taskVM.collaborators.isEmpty {
-                    emptyStateView
-                } else {
-                    collaboratorsListView
+        // ⚠️ ELIMINADO: NavigationView duplicado - Ya viene de ContentView
+        VStack {
+            if taskVM.collaborators.isEmpty {
+                emptyStateView
+            } else {
+                collaboratorsListView
+            }
+        }
+        .navigationTitle("Gestión de Colaboradores")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Listo") {
+                    dismiss()
                 }
             }
-            .navigationTitle("Gestión de Colaboradores")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Listo") {
-                        dismiss()
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showingAddForm = true
-                    } label: {
-                        Image(systemName: "person.badge.plus")
-                    }
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showingAddForm = true
+                } label: {
+                    Image(systemName: "person.badge.plus")
                 }
             }
-            .sheet(isPresented: $showingAddForm) {
-                collaboratorFormView
-            }
-            .sheet(item: $editingCollaborator) { collaborator in
-                collaboratorFormView(editing: collaborator)
-            }
+        }
+        .sheet(isPresented: $showingAddForm) {
+            collaboratorFormView
+        }
+        .sheet(item: $editingCollaborator) { collaborator in
+            collaboratorFormView(editing: collaborator)
         }
     }
     
@@ -147,6 +145,7 @@ struct CollaboratorsManagementView: View {
         .listStyle(.insetGrouped)
     }
     
+    // ... (el resto del código permanece igual)
     // MARK: - Form Views
     private var collaboratorFormView: some View {
         collaboratorFormView(editing: nil)
@@ -264,7 +263,9 @@ struct CollaboratorsManagementView: View {
 // MARK: - Preview
 struct CollaboratorsManagementView_Previews: PreviewProvider {
     static var previews: some View {
-        CollaboratorsManagementView()
-            .environmentObject(TaskViewModel.preview)
+        NavigationView {
+            CollaboratorsManagementView()
+        }
+        .environmentObject(TaskViewModel.preview)
     }
 }
